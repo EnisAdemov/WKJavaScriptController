@@ -11,7 +11,7 @@ public extension WKWebView {
             return objc_getAssociatedObject(self, &javaScriptControllerKey) as? WKJavaScriptController
         }
     }
-    
+
     // You must call it before initializing WKWebView or loading page.
     // ex) override func loadHTMLString(string: String, baseURL: NSURL?) -> WKNavigation? {
     //         prepareForJavaScriptController()
@@ -28,7 +28,7 @@ public extension WKWebView {
 
 open class JSValueType: NSObject {
     fileprivate var _value: NSNumber
-    
+
     fileprivate init(value: AnyObject) {
         _value = value as! NSNumber
     }
@@ -61,25 +61,25 @@ open class WKJavaScriptController: NSObject {
     // If true, do not allow NSNull(If passed undefined in JavaScript) for method arguments.
     // That is, if get NSNull as arguments, do not call method.
     open var shouldSafeMethodCall = true
-    
+
     // If true, converts to dictionary when json string is received as an argument.
     open var shouldConvertJSONString = true
-    
+
     private let bridgeProtocol: Protocol
     private let name: String
     fileprivate weak var target: AnyObject?
-    
+
     // User script that will use the bridge.
     private var userScripts = [WKUserScript]()
-    
+
     fileprivate var bridgeList = [MethodBridge]()
-    
+
     fileprivate var needsInject = true
-    
+
     fileprivate class MethodBridge {
         fileprivate var nativeSelector: Selector
         fileprivate var extendJsSelector: Bool // If true, use ObjC style naming.
-        
+
         fileprivate var jsSelector: String {
             let selector = NSStringFromSelector(nativeSelector)
             let components = selector.components(separatedBy: ":")
@@ -93,9 +93,9 @@ open class WKJavaScriptController: NSObject {
                     } else if index == 0 {
                         selector += component
                     } else if index == 1 {
-                        selector += "With\(component.capitalized)"
+                        selector += component
                     } else {
-                        selector += "And\(component.capitalized)"
+                        selector += component
                     }
                 }
                 return selector
@@ -103,17 +103,17 @@ open class WKJavaScriptController: NSObject {
                 return components.first!
             }
         }
-        
+
         fileprivate var argumentLength: Int {
             return max(NSStringFromSelector(nativeSelector).components(separatedBy: ":").count - 1, 0)
         }
-        
+
         fileprivate init(nativeSelector selector: Selector) {
             nativeSelector = selector
             extendJsSelector = false
         }
     }
-    
+
     public init(name: String, target: AnyObject, bridgeProtocol: Protocol) {
         self.name = name
         self.target = target
@@ -121,7 +121,7 @@ open class WKJavaScriptController: NSObject {
         super.init()
         parseBridgeProtocol()
     }
-    
+
     private func protocolsAdoptedBy(`protocol`: Protocol) -> [Protocol] {
         var protocols = [`protocol`]
         let protocolList = protocol_copyProtocolList(`protocol`, nil)
@@ -133,11 +133,11 @@ open class WKJavaScriptController: NSObject {
         }
         return protocols
     }
-    
+
     private func parseBridgeProtocol() {
         for `protocol` in protocolsAdoptedBy(protocol: bridgeProtocol.self).reversed() {
             log("Protocol: \(String(format: "%s", protocol_getName(`protocol`)))")
-            
+
             // Class methods are not supported.
             for (isRequired, isInstance) in [(true, true), (false, true)] {
                 let methodList = protocol_copyMethodDescriptionList(`protocol`, isRequired, isInstance, nil)
@@ -146,14 +146,14 @@ open class WKJavaScriptController: NSObject {
                         let limit = argumentLengthLimit
                         while list?.pointee.name != nil {
                             defer { list = list?.successor() }
-                            
+
                             guard let selector = list?.pointee.name,
                                 let types = list?.pointee.types,
                                 let signature = String(cString: types, encoding: .utf8) else {
                                     log("Method signature not found, so it was excluded. (selector: \(list?.pointee.name ?? Selector(("nil"))))")
                                     continue
                             }
-                            
+
                             // Ref: http://nshipster.com/type-encodings/
                             // c: A char                  v: A void
                             // C: An unsigned char        B: A C++ bool or C99 _bool
@@ -171,26 +171,26 @@ open class WKJavaScriptController: NSObject {
                                 log("Can not receive native return in JavaScript, so it was excluded. (selector: \(selector))")
                                 continue
                             }
-                            
+
                             if signature.range(of: "[cC#\\[\\{\\(b\\^\\?]", options: .regularExpression) != nil {
                                 log("It has an unsupported reference type as arguments, so it was excluded. (selector: \(selector))")
                                 log("Allowed reference types are NSNumber, NSString, NSDate, NSArray, NSDictionary, and NSNull.")
                                 continue
                             }
-                            
+
                             // Value types of Swift can't be used. because method call is based on ObjC.
                             if signature.range(of: "[iIsSlLqQfdB]", options: .regularExpression) != nil {
                                 log("It has an unsupported value type as arguments, so it was excluded. (selector: \(selector))")
                                 log("Allowed value types are JSBool, JSInt and JSFloat.")
                                 continue
                             }
-                            
+
                             let bridge = MethodBridge(nativeSelector: selector)
                             if bridge.argumentLength > limit {
                                 log("Argument length is longer than \(limit), so it was excluded. (selector: \(bridge.nativeSelector))")
                                 continue
                             }
-                            
+
                             // Using ObjC style naming if have a method with the same name.
                             let list = bridgeList.filter { $0.jsSelector == bridge.jsSelector }
                             if !list.isEmpty {
@@ -199,7 +199,7 @@ open class WKJavaScriptController: NSObject {
                             for bridge in list {
                                 bridge.extendJsSelector = true
                             }
-                            
+
                             bridgeList.append(bridge)
                             log("Parsed: \(isRequired ? "" : "Optional ")\(bridge.nativeSelector) -> \(bridge.jsSelector)")
                         }
@@ -208,7 +208,7 @@ open class WKJavaScriptController: NSObject {
             }
         }
     }
-    
+
     fileprivate func injectTo(_ userContentController: WKUserContentController) {
         userContentController.removeAllUserScripts()
         var forMainFrameOnly = true
@@ -223,7 +223,7 @@ open class WKJavaScriptController: NSObject {
         }
         needsInject = false
     }
-    
+
     private func bridgeScript(_ forMainFrameOnly: Bool) -> WKUserScript {
         var source = "window.\(name) = {"
         for bridge in bridgeList {
@@ -232,16 +232,16 @@ open class WKJavaScriptController: NSObject {
         source += "};"
         return WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: forMainFrameOnly)
     }
-    
+
     fileprivate func log(_ message: String) {
         NSLog("[WKJavaScriptController] \(message)")
     }
-    
+
     open func addUserScript(_ userScript: WKUserScript) {
         userScripts.append(userScript)
         needsInject = true
     }
-    
+
     open func removeAllUserScripts() {
         userScripts.removeAll()
         needsInject = true
@@ -273,19 +273,19 @@ extension WKJavaScriptController: WKScriptMessageHandler {
             let bridge = bridgeList.first(where: { $0.jsSelector == message.name }) else {
                 return
         }
-        
+
         if args.count != bridge.argumentLength {
             log("Argument length is different. (received: \(args.count), required: \(bridge.argumentLength))")
             return
         }
-        
+
         guard let method = class_getInstanceMethod(target.classForCoder, bridge.nativeSelector) else {
             log("An unimplemented method has been called. (selector: \(bridge.nativeSelector))")
             return
         }
-        
+
         let imp = method_getImplementation(method)
-        
+
         func cast(_ arg: Arg) -> Arg {
             if let number = arg as? NSNumber,
                 let type = String(cString: number.objCType, encoding: .utf8) {
@@ -308,7 +308,7 @@ extension WKJavaScriptController: WKScriptMessageHandler {
             }
             return arg
         }
-        
+
         let notificationCenter = NotificationCenter.default
         let userInfo = [
             "nativeSelector": bridge.nativeSelector,
@@ -316,7 +316,7 @@ extension WKJavaScriptController: WKScriptMessageHandler {
             "args": args
         ] as [String: Any]
         notificationCenter.post(name: .WKJavaScriptControllerWillMethodInvocation, object: nil, userInfo: userInfo)
-        
+
         if shouldSafeMethodCall {
             for arg in args {
                 if arg is NSNull {
@@ -331,7 +331,7 @@ extension WKJavaScriptController: WKScriptMessageHandler {
                 }
             }
         }
-        
+
         switch bridge.argumentLength {
         case 0:
             let method = unsafeBitCast(imp, to: Invocation0.self)
